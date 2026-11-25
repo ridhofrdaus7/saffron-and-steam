@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#173d36"><title>Saffron & Steam · A little kitchen, a lot of heart</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main id="app">
+<header class="masthead"><div class="brand"><span class="brand-mark">S<span>&</span>S</span><div><h1>Saffron <i>&</i> Steam</h1><p>A LITTLE KITCHEN, A LOT OF HEART</p></div></div><div class="shift-status"><span id="shift-label">THE LUNCH SERVICE</span><strong id="clock">03:00</strong><div class="time-track"><i id="time-bar"></i></div></div><div class="totals"><span>TODAY'S TAKINGS</span><strong id="money">0 <small>coins</small></strong></div><button id="sound" class="icon-btn" aria-label="Toggle sound">Sound on</button><button id="pause" class="icon-btn" aria-label="Pause game">Ⅱ</button></header>
+<section class="order-rail" aria-label="Customer orders"><div class="rail-label"><span class="eyebrow">ON THE PASS</span><h2>Made to order.</h2><p id="rush-label">A slow start. A beautiful lunch.</p><span class="combo" id="combo">Fresh apron. Fresh start.</span></div><div id="orders"></div></section>
+<section class="kitchen" aria-label="Interactive kitchen"><canvas id="kitchen" width="1200" height="460" aria-label="Illustrated kitchen with chopping board, two pans, two plates, pantry and serving pass"></canvas><div id="station-controls"></div><div class="room-label"><span class="status-dot"></span> <span id="room-status">THE KITCHEN IS OPEN</span></div><div class="held"><span>IN YOUR HANDS</span><strong id="held">Empty · choose an ingredient</strong></div><div id="toast" role="status" aria-live="polite"></div></section>
+<footer class="command-bar"><div class="next-step"><span class="keycap">?</span><div><small>CHEF'S NOTE</small><p id="hint">Take a tomato, mushroom or shrimp from the pantry.</p></div></div><button id="discard">Discard <kbd>X</kbd></button><button id="recipes">Recipe book <kbd>R</kbd></button><button id="help">How to play</button></footer>
+<div class="bottom-line"><span>COOK WITH CARE. SERVE WITH HEART.</span><span id="stats">0 served · 0 missed · 0 wasted</span><span>Mouse or keys 1–9 · Space to pause</span></div>
+</main>
+<div id="modal" class="overlay"></div>
+<script type="module" src="main.js"></script>
+</body></html>

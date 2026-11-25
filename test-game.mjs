@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import {createKitchen,act,tickKitchen,servePlate} from './game/kitchen-state.js';
+function prepare(s,item,pan){act(s,item);for(let i=0;i<4;i++)act(s,'prep');assert.equal(s.hand.stage,'chopped');act(s,'pan'+pan);assert.equal(s.hand,null);}
+const s=createKitchen();prepare(s,'tomato',0);prepare(s,'mushroom',1);tickKitchen(s,8.1);act(s,'pan0');act(s,'plate0');act(s,'herbs');servePlate(s,1);assert.equal(s.money,26);assert.equal(s.served,1);act(s,'pan1');act(s,'plate0');act(s,'herbs');servePlate(s,2);assert.equal(s.money,58);assert.equal(s.combo,2);
+prepare(s,'tomato',0);prepare(s,'mushroom',1);tickKitchen(s,8.1);act(s,'pan0');act(s,'plate1');const before=s.money;servePlate(s,3);assert.equal(s.money,before,'Incomplete duet cannot serve');act(s,'pan1');act(s,'plate1');act(s,'herbs');servePlate(s,3);assert.equal(s.served,3);assert.equal(s.money,108);assert.equal(s.plates[1].items.length,0);
+prepare(s,'shrimp',0);s.paused=true;const t=s.remaining;tickKitchen(s,30);assert.equal(s.remaining,t);assert.equal(s.pans[0].time,0);s.paused=false;tickKitchen(s,18.1);assert.equal(s.pans[0].burnt,true);assert.equal(s.wasted,1);assert.equal(s.combo,0);act(s,'pan0');assert.equal(s.pans[0],null);
+act(s,'tomato');act(s,'mushroom');assert.equal(s.hand.item,'tomato','Full hands cannot replace ingredient');act(s,'discard');assert.equal(s.hand,null);assert.equal(s.wasted,2);tickKitchen(s,200);assert.equal(s.ended,true);const count=s.orders.length;assert.equal(count,3);assert.ok(s.missed>0);
+const practice=createKitchen(0,true);tickKitchen(practice,1000);assert.equal(practice.ended,false);assert.equal(practice.missed,0);assert.equal(practice.remaining,180);
+console.log('PASS: concurrent cooking, 3 recipes, duet validation, garnish, streak, pause, burns, discard, order expiry, shift end, practice.');
