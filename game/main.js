@@ -1,41 +1,473 @@
-import {INGREDIENTS, RECIPES, SHIFTS, STATIONS, matchingRecipe} from './recipes.js';
-import {createKitchen, tickKitchen, act, servePlate, nextHint, tell} from './kitchen-state.js';
-import {renderKitchen} from './kitchen-art.js';
-import {unlockAudio, playSound, setMuted} from './audio.js';
-const $=id=>document.getElementById(id);
-const ctx=$('kitchen').getContext('2d');
-let state=createKitchen(),muted=false,last=performance.now(),orderKey='',mode='welcome',unlocked=0,best=0;
-try{unlocked=Math.max(0,Math.min(2,Number(localStorage.getItem('saffron-unlocked'))||0));best=Number(localStorage.getItem('saffron-best'))||0;}catch{}
-for(const station of STATIONS){const b=document.createElement('button');b.className='station';b.id='station-'+station.id;b.style.left=station.x/12+'%';b.style.top=station.y/4.6+'%';b.setAttribute('aria-label',station.label);b.innerHTML=`<kbd>${station.key==='Enter'?'↵':station.key}</kbd>${station.label}<small> </small>`;b.onclick=()=>useStation(station);$('station-controls').append(b);}
-function useStation(station){if(mode!=='game')return;unlockAudio();state.chef.tx=station.chefX;state.chef.ty=station.chefY;act(state,station.id);sound();updateUI();}
-function sound(){if(state.lastSound){playSound(state.lastSound);state.lastSound=null;}}
-function openModal(html,kind){mode=kind;state.paused=true;$('modal').innerHTML=`<section class="modal-card" role="dialog" aria-modal="true">${html}</section>`;const b=$('modal').querySelector('button');b?.focus();}
-function closeModal(){mode='game';state.paused=false;$('modal').innerHTML='';$('pause').focus();}
-function start(shift=0,practice=false){unlockAudio();state=createKitchen(shift,practice);orderKey='';mode='game';$('modal').innerHTML='';tell(state,'Welcome, chef. Start with a Sunshine bowl: tomato → chop → pan → plate.');updateUI();}
-function welcome(){openModal(`<span class="eyebrow">WELCOME TO YOUR LITTLE KITCHEN</span><div class="flourish">✧</div><h2>Saffron & Steam</h2><p>Sunlight on the tiles. Rice on the stove.<br>A few hungry guests, and a kitchen to call your own.</p><div class="steps"><div class="step"><b>01 · Prepare</b>Pick a topping. Put it on the board, then tap three times to chop.</div><div class="step"><b>02 · Cook</b>Use either pan. Prep the next bowl while the first one sizzles.</div><div class="step"><b>03 · Finish</b>Plate on saffron rice. A sprinkle of herbs earns a little extra.</div><div class="step"><b>04 · Serve</b>Match a guest's ticket. Quick, careful cooking builds a streak.</div></div><button class="primary" id="begin">Tie your apron · Start lunch</button><button id="practice">Practice at your own pace</button><p style="font-size:10px">Three services to master · Original art & sound · Best takings: ${best} coins</p>${unlocked?'<button id="choose-shift">Choose a service</button>':''}`,'welcome');$('begin').onclick=()=>start();$('practice').onclick=()=>start(0,true);if($('choose-shift'))$('choose-shift').onclick=shiftMenu;}
-function shiftMenu(){openModal(`<span class="eyebrow">ONE KITCHEN, THREE SERVICES</span><h2>Your next service.</h2><p>Reach each service's coin goal to unlock the next.</p>${SHIFTS.map((s,i)=>`<button id="shift-${i}" ${i>unlocked?'disabled':''}>${s.name} · ${s.goal} coins ${i>unlocked?'· Locked':''}</button>`).join('')}<p>Later services bring shorter patience and more complex orders.</p><button id="back">Back to the kitchen</button>`,'shifts');SHIFTS.forEach((s,i)=>{$('shift-'+i).onclick=()=>start(i);});$('back').onclick=welcome;}
-function recipeBook(){if(mode!=='game')return;openModal(`<span class="eyebrow">THE HOUSE RECIPES</span><h2>Simple things, done well.</h2><p>Every plate starts with saffron rice. Cook each topping separately.<br>Add fresh herbs to any bowl for +5 coins.</p><div class="recipe-grid">${RECIPES.map(r=>`<article class="recipe-card"><h3>${r.name}</h3><p>${r.description}</p><p><b>${r.items.map(i=>INGREDIENTS[i].name).join(' + ')} · ${r.price} coins</b></p></article>`).join('')}</div><p>For a Garden duet, put both cooked toppings on the same plate.<br>The selected plate has a golden rim. Click a plate to select it.</p><button class="primary" id="resume">Back to cooking</button>`,'recipes');$('resume').onclick=closeModal;}
-function help(){if(mode!=='game')return;openModal(`<span class="eyebrow">A NOTE FROM THE CHEF</span><h2>Find your rhythm.</h2><div class="steps"><div class="step"><b>1 / 2 / 3 · Pantry</b>Choose tomato, mushroom, or shrimp. You carry one ingredient at a time.</div><div class="step"><b>4 · Chopping board</b>First tap puts it down. Three more chops prepare it and put it in your hands.</div><div class="step"><b>5 / 6 · Stovetop</b>Add chopped food. Wait for READY, then tap again to pick it up. It burns 11 seconds later.</div><div class="step"><b>7 / 8 · Plating</b>Add cooked food or select a bowl. The golden rim marks the selected one.</div><div class="step"><b>9, then Enter · Finish & serve</b>Herbs add +5 coins. Enter serves a matching ticket. Clicking a ticket also serves.</div><div class="step"><b>X · Compost / Space · Pause</b>Discard held food, or your selected bowl if your hands are empty. R opens recipes.</div></div><p>Fast service adds +3 coins. Consecutive orders earn up to +15 each.<br>Both pans cook at once—keep them busy!</p><button class="primary" id="resume">Ready, chef</button>`,'help');$('resume').onclick=closeModal;}
-function pause(){if(mode==='pause'){closeModal();return;}if(mode!=='game')return;openModal(`<span class="eyebrow">TAKE A BREATH</span><h2>The kitchen can wait.</h2><p>Your pans and your guests are paused.</p><button class="primary" id="resume">Back to service</button><button id="restart">Restart this service</button><button id="home">Main menu</button>`,'pause');$('resume').onclick=closeModal;$('restart').onclick=()=>start(state.shift,state.practice);$('home').onclick=welcome;}
-function results(){const goal=SHIFTS[state.shift].goal,passed=state.money>=goal;best=Math.max(best,state.money);if(passed)unlocked=Math.max(unlocked,Math.min(2,state.shift+1));try{localStorage.setItem('saffron-unlocked',String(unlocked));localStorage.setItem('saffron-best',String(best));}catch{}
- const stars=state.money>=goal*1.5?3:passed?2:state.served?1:0;
- openModal(`<span class="eyebrow">THE LAST BOWL, THE LAST SMILE</span><h2>${passed?'A service to remember.':'Every service teaches you.'}</h2><div class="rating">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div><p>${SHIFTS[state.shift].name} · Goal ${goal} coins</p><div class="results"><div><strong>${state.money}</strong><span>COINS EARNED</span></div><div><strong>${state.served}</strong><span>HAPPY GUESTS</span></div><div><strong>${state.bestCombo}</strong><span>BEST STREAK</span></div></div><p>${state.missed} guests left · ${state.wasted} ingredients wasted<br>${passed?'The neighborhood will be back.':'Try prepping the next topping while the first pan cooks.'}</p><button class="primary" id="again">Cook this service again</button>${passed&&state.shift<2?'<button id="next">Open the next service</button>':''}<button id="home">Main menu</button>`,'results');$('again').onclick=()=>start(state.shift);$('home').onclick=welcome;if($('next'))$('next').onclick=()=>start(state.shift+1);}
-function updateUI(){
- const mins=Math.floor(state.remaining/60),secs=Math.ceil(state.remaining%60);$('clock').textContent=state.practice?'∞':`${String(mins).padStart(2,'0')}:${String(secs===60?59:secs).padStart(2,'0')}`;
- $('shift-label').textContent=state.practice?'THE PRACTICE KITCHEN':SHIFTS[state.shift].name.toUpperCase();$('money').innerHTML=`${state.money} <small>coins</small>`;$('time-bar').style.width=(state.remaining/SHIFTS[state.shift].seconds*100)+'%';$('clock').style.color=state.remaining<30&&!state.practice?'#bc6245':'';
- $('rush-label').textContent=state.practice?'No deadline. Find your rhythm.':state.elapsed<60?'A slow start. A beautiful lunch.':state.elapsed<120?'The neighborhood is getting hungry.':'Last call. Make every bowl count.';
- $('combo').textContent=state.combo>1?`${state.combo} bowl streak · +${Math.min(15,(state.combo-1)*2)} bonus`:`Service goal: ${SHIFTS[state.shift].goal} coins`;
- $('held').textContent=state.hand?`${INGREDIENTS[state.hand.item].name} · ${state.hand.stage}`:'Empty · ready for the next step';$('hint').textContent=nextHint(state);$('stats').textContent=`${state.served} served · ${state.missed} missed · ${state.wasted} wasted`;
- $('room-status').textContent=state.practice?'PRACTICE · NO TIME LIMIT':state.elapsed>120?'LAST CALL · KEEP THE PANS SINGING':'THE KITCHEN IS OPEN';
- $('toast').textContent=state.notice;$('toast').className=state.noticeTime>0?'show':'';
- const key=state.orders.map(o=>o.id).join(',');if(key!==orderKey){orderKey=key;$('orders').innerHTML=state.orders.map(o=>`<button class="ticket" id="order-${o.id}" aria-label="Serve ${o.recipe.name}"><div class="ticket-head"><span>ORDER ${String(o.id).padStart(2,'0')}</span><b>${o.recipe.price} coins</b></div><h3>${o.recipe.name}</h3><div class="recipe-line">${o.recipe.short}</div><div class="patience"><i></i></div><div class="ticket-foot"><span>Made with love</span><span class="wait"></span></div></button>`).join('');for(const o of state.orders)$('order-'+o.id).onclick=()=>{if(mode!=='game')return;unlockAudio();servePlate(state,o.id);sound();updateUI();};}
- const current=matchingRecipe(state.plates[state.selectedPlate].items);
- for(const o of state.orders){const el=$('order-'+o.id),fraction=o.remaining/o.max;el.classList.toggle('urgent',fraction<.25);el.classList.toggle('ready',o.recipe.id===current?.id&&!state.hand);el.querySelector('.patience i').style.width=(fraction*100)+'%';el.querySelector('.wait').textContent=state.practice?'Take your time':Math.ceil(o.remaining)+'s';}
- for(const station of STATIONS){const el=$('station-'+station.id);el.classList.toggle('active',state.lastAction===station.id);el.classList.remove('ready','burn');let desc='';if(station.id==='prep')desc=state.prep?`${state.prep.chops}/3 chops`:'Tap to prepare';if(station.id.startsWith('pan')){const pan=state.pans[Number(station.id.slice(-1))];if(pan){const need=INGREDIENTS[pan.item].cook;desc=pan.burnt?'Burnt · tap to clean':pan.time>=need?'Ready · tap to plate':`Cooking · ${Math.ceil(need-pan.time)}s`;el.classList.toggle('ready',pan.time>=need&&!pan.burnt);el.classList.toggle('burn',pan.burnt);}else desc='Ready to cook';}if(station.id.startsWith('plate')){const i=Number(station.id.slice(-1)),p=state.plates[i];desc=p.items.length?matchingRecipe(p.items)?.name||'Add a matching topping':'Saffron rice';if(p.herbs)desc+=' + herbs';el.classList.toggle('ready',p.items.length>0);}el.querySelector('small').textContent=desc;}
+// Composition root for Ember & Ladle.
+// Coordinates KitchenSimulation, InputManager, KitchenRenderer, AudioEngine, and DOM HUD.
+
+import {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  CHOPS_REQUIRED,
+  GameMode,
+  INGREDIENTS,
+  MAX_DELTA_SEC,
+  PAN_PERFECT_WINDOW_SEC,
+  RECIPES,
+  SHIFTS,
+  STATIONS,
+  findMatchingRecipe,
+} from './config.js';
+import { AudioEngine } from './audio-engine.js';
+import { InputManager } from './input-manager.js';
+import { KitchenRenderer } from './kitchen-renderer.js';
+import { KitchenSimulation } from './state-machine.js';
+
+const el = (id) => document.getElementById(id);
+const canvas = el('kitchen');
+const sim = new KitchenSimulation(0, false);
+const renderer = new KitchenRenderer(canvas);
+const audio = new AudioEngine();
+const input = new InputManager();
+
+let unlockedShift = 0;
+let bestScore = 0;
+let lastOrderKey = '';
+let lastFrameMs = performance.now();
+let uiRefreshAccum = 0;
+let rafId = 0;
+
+try {
+  unlockedShift = Math.max(0, Math.min(2, Number(localStorage.getItem('ember-unlocked')) || 0));
+  bestScore = Number(localStorage.getItem('ember-best')) || 0;
+} catch {}
+
+function buildStationButtons() {
+  const host = el('station-controls');
+  for (const station of STATIONS) {
+    const btn = document.createElement('button');
+    btn.className = 'station';
+    btn.type = 'button';
+    btn.id = `station-${station.id}`;
+    btn.style.left = `${(station.x / CANVAS_WIDTH) * 100}%`;
+    btn.style.top = `${(station.y / CANVAS_HEIGHT) * 100}%`;
+    btn.setAttribute('aria-label', station.label);
+    const keyGlyph = station.key === 'Enter' ? '↵' : station.key;
+    btn.innerHTML = `<kbd>${keyGlyph}</kbd>${station.label}<small>Ready</small>`;
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      triggerAction(station.id);
+    });
+    host.append(btn);
+  }
 }
-$('sound').onclick=()=>{unlockAudio();muted=!muted;setMuted(muted);$('sound').textContent=muted?'Sound off':'Sound on';};$('pause').onclick=pause;$('recipes').onclick=recipeBook;$('help').onclick=help;$('discard').onclick=()=>{if(mode==='game'){act(state,'discard');sound();updateUI();}};
-window.addEventListener('keydown',e=>{if(e.repeat)return;if(e.key==='Escape'){if(['recipes','help','pause'].includes(mode)){e.preventDefault();closeModal();}else if(mode==='game')pause();return;}if(e.code==='Space'){if(mode==='game'||mode==='pause'){e.preventDefault();pause();}return;}if(mode!=='game')return;const key=e.key.toLowerCase();if(key==='r'){e.preventDefault();recipeBook();return;}if(key==='x'){e.preventDefault();act(state,'discard');sound();updateUI();return;}const station=STATIONS.find(s=>s.key.toLowerCase()===key);if(station){e.preventDefault();useStation(station);}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='game')pause();});
-let uiTimer=0;
-function frame(now){const dt=Math.min(.1,(now-last)/1000);last=now;tickKitchen(state,dt);sound();renderKitchen(ctx,state,now/1000);uiTimer+=dt;if(uiTimer>.08){updateUI();uiTimer=0;}if(state.ended&&mode==='game')results();requestAnimationFrame(frame);}
-updateUI();welcome();requestAnimationFrame(frame);
+
+function flushCue() {
+  if (sim.pendingCue) {
+    audio.play(sim.pendingCue);
+    sim.pendingCue = null;
+  }
+}
+
+function triggerAction(actionId) {
+  audio.unlock();
+  if (actionId === 'close_or_toggle') {
+    if (sim.mode === GameMode.PLAYING) openPauseModal();
+    else if ([GameMode.PAUSED, GameMode.RECIPES, GameMode.HELP].includes(sim.mode)) closeModal();
+    return;
+  }
+  if (actionId === 'pause') {
+    if (sim.mode === GameMode.PLAYING) openPauseModal();
+    else if (sim.mode === GameMode.PAUSED) closeModal();
+    return;
+  }
+  if (actionId === 'recipes') {
+    if (sim.mode === GameMode.PLAYING) openRecipesModal();
+    return;
+  }
+  if (actionId === 'help') {
+    if (sim.mode === GameMode.PLAYING) openHelpModal();
+    return;
+  }
+
+  if (!sim.isPlaying()) {
+    input.bufferAction(actionId);
+    return;
+  }
+
+  sim.performAction(actionId);
+  flushCue();
+  syncHUD();
+}
+
+const unbindInput = input.onAction((action) => triggerAction(action));
+
+function openModal(mode, html) {
+  sim.transitionMode(mode);
+  input.setContext('modal');
+  el('modal').innerHTML = `<section class="modal-card" role="dialog" aria-modal="true">${html}</section>`;
+  const firstBtn = el('modal').querySelector('button');
+  if (firstBtn) firstBtn.focus();
+}
+
+function closeModal() {
+  sim.transitionMode(GameMode.PLAYING);
+  input.setContext('gameplay');
+  el('modal').innerHTML = '';
+  const buffered = input.consumeBuffered();
+  if (buffered) {
+    sim.performAction(buffered);
+    flushCue();
+  }
+  syncHUD();
+}
+
+function startService(shiftIndex = 0, practice = false) {
+  audio.unlock();
+  sim.reset(shiftIndex, practice);
+  sim.transitionMode(GameMode.PLAYING);
+  input.setContext('gameplay');
+  lastOrderKey = '';
+  el('modal').innerHTML = '';
+  sim.notice = 'Service started! Boil Noodles [4 -> 8] while searing toppings [1-3 -> 5 -> 6/7].';
+  sim.noticeTime = 3.5;
+  syncHUD();
+}
+
+function openTitleModal() {
+  openModal(
+    GameMode.TITLE,
+    `<span class="eyebrow">OPEN-FIRE BISTRO KITCHEN</span>
+     <div class="flourish">✦</div>
+     <h2>Ember &amp; Ladle</h2>
+     <p>Two copper skillets, a bubbling broth pot, and an order rail full of hungry guests.<br>Plan your route, hit the golden sear window, and plate signature bowls.</p>
+     <div class="steps">
+       <div class="step"><b>01 · Prep &amp; Simmer</b>Chop Tomato, Mushroom, or Shrimp [1–3] on the board [5]. Noodles [4] go straight into the Broth Pot [8].</div>
+       <div class="step"><b>02 · Golden Sear</b>Sear toppings in Skillet A [6] or B [7]. Lift during the golden PERFECT window for +8 bonus coins!</div>
+       <div class="step"><b>03 · Compose &amp; Garnish</b>Combine components on Plate 1 [9] or 2 [0]. Add Herb Finish [G] for +6 coins.</div>
+       <div class="step"><b>04 · Serve &amp; Streak</b>Press [Enter] or click a glowing ticket. Consecutive fast serves build your zone multiplier.</div>
+     </div>
+     <button class="primary" id="btn-start" type="button">Start Bistro Lunch</button>
+     <button id="btn-practice" type="button">Practice Mode (No Timer)</button>
+     ${unlockedShift > 0 ? '<button id="btn-shifts" type="button">Choose Service</button>' : ''}
+     <p style="font-size:11px;margin-top:12px">6 Recipes · Dual Appliances · Best Takings: ${bestScore} coins</p>`
+  );
+  el('btn-start').addEventListener('click', () => startService(0, false));
+  el('btn-practice').addEventListener('click', () => startService(0, true));
+  const shiftsBtn = el('btn-shifts');
+  if (shiftsBtn) shiftsBtn.addEventListener('click', openShiftModal);
+}
+
+function openShiftModal() {
+  openModal(
+    GameMode.SHIFTS,
+    `<span class="eyebrow">THREE BISTRO SERVICES</span>
+     <h2>Select Your Shift</h2>
+     <p>Hit each service goal to unlock higher-heat dinner rushes.</p>
+     ${SHIFTS.map(
+       (s, i) =>
+         `<button id="shift-${i}" type="button" ${i > unlockedShift ? 'disabled' : ''}>${s.name} · Goal ${s.goal} coins${i > unlockedShift ? ' (Locked)' : ''}</button>`
+     ).join('')}
+     <div style="margin-top:12px"><button id="btn-back" type="button">Back</button></div>`
+  );
+  SHIFTS.forEach((s, i) => {
+    el(`shift-${i}`).addEventListener('click', () => startService(i, false));
+  });
+  el('btn-back').addEventListener('click', openTitleModal);
+}
+
+function openRecipesModal() {
+  openModal(
+    GameMode.RECIPES,
+    `<span class="eyebrow">BISTRO MENU</span>
+     <h2>House Recipes</h2>
+     <p>Garnish any completed plate with Herbs [G] for +6 coins. Lift skillets in the golden window for +8.</p>
+     <div class="recipe-grid">
+       ${RECIPES.map(
+         (r) =>
+           `<article class="recipe-card">
+             <h3>${r.name} · ${r.price}c</h3>
+             <p>${r.description}</p>
+             <p><b>${r.short}</b></p>
+           </article>`
+       ).join('')}
+     </div>
+     <button class="primary" id="btn-resume" type="button">Back to Kitchen</button>`
+  );
+  el('btn-resume').addEventListener('click', closeModal);
+}
+
+function openHelpModal() {
+  openModal(
+    GameMode.HELP,
+    `<span class="eyebrow">KITCHEN CONTROLS</span>
+     <h2>Master the Line</h2>
+     <div class="steps">
+       <div class="step"><b>1–4 · Pantry</b>Pick Tomato, Mushroom, Shrimp, or Noodles.</div>
+       <div class="step"><b>5 · Chop Board</b>Place raw item, then tap 3 times to slice.</div>
+       <div class="step"><b>6 / 7 · Copper Skillets</b>Sear chopped ingredients. Watch the golden PERFECT marker!</div>
+       <div class="step"><b>8 · Broth Pot</b>Simmer Noodles (no chop!) or chopped Tomato for broth.</div>
+       <div class="step"><b>9 / 0 · Plates</b>Combine cooked items into single, duet, or 3-part bowls.</div>
+       <div class="step"><b>G / Enter / X</b>Garnish [G], Serve [Enter], Compost [X], Pause [Space].</div>
+     </div>
+     <button class="primary" id="btn-resume" type="button">Resume Cooking</button>`
+  );
+  el('btn-resume').addEventListener('click', closeModal);
+}
+
+function openPauseModal() {
+  openModal(
+    GameMode.PAUSED,
+    `<span class="eyebrow">SERVICE PAUSED</span>
+     <h2>Take a Breather</h2>
+     <p>Stoves and guest timers are held while you review your plan.</p>
+     <button class="primary" id="btn-resume" type="button">Resume Service</button>
+     <button id="btn-restart" type="button">Restart Shift</button>
+     <button id="btn-home" type="button">Main Menu</button>`
+  );
+  el('btn-resume').addEventListener('click', closeModal);
+  el('btn-restart').addEventListener('click', () => startService(sim.shift, sim.practice));
+  el('btn-home').addEventListener('click', openTitleModal);
+}
+
+function openResultsModal() {
+  const goal = SHIFTS[sim.shift].goal;
+  const passed = sim.money >= goal;
+  bestScore = Math.max(bestScore, sim.money);
+  if (passed) unlockedShift = Math.max(unlockedShift, Math.min(2, sim.shift + 1));
+  try {
+    localStorage.setItem('ember-unlocked', String(unlockedShift));
+    localStorage.setItem('ember-best', String(bestScore));
+  } catch {}
+
+  const stars = sim.money >= goal * 1.45 ? 3 : passed ? 2 : sim.served > 0 ? 1 : 0;
+  openModal(
+    GameMode.RESULTS,
+    `<span class="eyebrow">SERVICE COMPLETE</span>
+     <h2>${passed ? 'Standing Ovation!' : 'Service Wrapped'}</h2>
+     <div class="rating">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+     <p>${SHIFTS[sim.shift].name} · Goal ${goal} coins</p>
+     <div class="results">
+       <div><strong>${sim.money}</strong><span>COINS EARNED</span></div>
+       <div><strong>${sim.served}</strong><span>DISHES SERVED</span></div>
+       <div><strong>${sim.perfectCount}</strong><span>PERFECT SEARS</span></div>
+       <div><strong>${sim.bestCombo}x</strong><span>BEST STREAK</span></div>
+     </div>
+     <p>${sim.missed} missed · ${sim.wasted} wasted</p>
+     <button class="primary" id="btn-again" type="button">Play Again</button>
+     ${passed && sim.shift < 2 ? '<button id="btn-next" type="button">Next Service</button>' : ''}
+     <button id="btn-home" type="button">Main Menu</button>`
+  );
+  el('btn-again').addEventListener('click', () => startService(sim.shift, sim.practice));
+  el('btn-home').addEventListener('click', openTitleModal);
+  const nextBtn = el('btn-next');
+  if (nextBtn) nextBtn.addEventListener('click', () => startService(sim.shift + 1, false));
+}
+
+function syncOrderTickets() {
+  const key = sim.orders.map((o) => o.id).join(',');
+  if (key !== lastOrderKey) {
+    lastOrderKey = key;
+    el('orders').innerHTML = sim.orders
+      .map((o) => {
+        const chips = o.recipe.components
+          .map((c) => {
+            const ing = INGREDIENTS[c.item];
+            return `<span class="chip" style="background:${ing.color}">${ing.shortName}</span>`;
+          })
+          .join('');
+        return `<button class="ticket ${o.vip ? 'vip' : ''}" id="order-${o.id}" type="button" aria-label="Serve ${o.recipe.name}">
+          <div class="ticket-head">
+            <span>${o.vip ? '★ VIP #' + String(o.id).padStart(2, '0') : 'ORDER #' + String(o.id).padStart(2, '0')}</span>
+            <b>${o.vip ? Math.round(o.recipe.price * 1.5) : o.recipe.price}c</b>
+          </div>
+          <h3>${o.recipe.name}</h3>
+          <div class="ticket-chips">${chips}</div>
+          <div class="patience"><i></i></div>
+          <div class="ticket-foot"><span>${o.vip ? '1.5x VIP Tip' : 'Fresh +5c'}</span><span class="wait"></span></div>
+        </button>`;
+      })
+      .join('');
+
+    for (const o of sim.orders) {
+      el(`order-${o.id}`).addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        audio.unlock();
+        if (!sim.isPlaying()) return;
+        sim.serveSelectedPlate(o.id);
+        flushCue();
+        syncHUD();
+      });
+    }
+  }
+
+  const activePlateRecipe = findMatchingRecipe(sim.plates[sim.selectedPlate].components);
+  for (const o of sim.orders) {
+    const card = el(`order-${o.id}`);
+    if (!card) continue;
+    const ratio = Math.max(0, o.remaining / o.max);
+    card.classList.toggle('urgent', ratio < 0.28);
+    card.classList.toggle('ready', activePlateRecipe?.id === o.recipe.id && !sim.hand);
+    card.querySelector('.patience i').style.width = `${ratio * 100}%`;
+    card.querySelector('.wait').textContent = sim.practice ? 'Zen' : `${Math.ceil(o.remaining)}s`;
+  }
+}
+
+function syncHUD() {
+  const shift = SHIFTS[sim.shift];
+  const mins = Math.floor(sim.remaining / 60);
+  const secs = Math.floor(sim.remaining % 60);
+  el('clock').textContent = sim.practice
+    ? '∞'
+    : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  el('clock').style.color = sim.remaining < 30 && !sim.practice ? '#c44c36' : '';
+  el('shift-label').textContent = sim.practice ? 'PRACTICE KITCHEN' : shift.name.toUpperCase();
+  el('money').innerHTML = `${sim.money} <small>coins</small>`;
+  el('time-bar').style.width = `${(sim.remaining / shift.seconds) * 100}%`;
+
+  const comboEl = el('combo');
+  if (sim.combo >= 3) {
+    comboEl.textContent = `IN THE ZONE · ${sim.combo}x STREAK (+${Math.min(20, (sim.combo - 1) * 3)}c)`;
+    comboEl.classList.add('zone');
+  } else if (sim.combo > 1) {
+    comboEl.textContent = `${sim.combo}x Streak · +${(sim.combo - 1) * 3}c`;
+    comboEl.classList.remove('zone');
+  } else {
+    comboEl.textContent = `Goal: ${shift.goal} coins`;
+    comboEl.classList.remove('zone');
+  }
+
+  el('rush-label').textContent = sim.practice
+    ? 'No clock pressure. Experiment with combos.'
+    : sim.elapsed < 60
+    ? 'Opening service. Build your dual-appliance flow.'
+    : sim.elapsed < 120
+    ? 'Dinner rush! Keep both skillets & pot busy.'
+    : 'Final push! Prioritize urgent & VIP tickets.';
+
+  el('held').textContent = sim.hand
+    ? `${INGREDIENTS[sim.hand.item].shortName} (${sim.hand.stage.toUpperCase()})`
+    : 'Empty · pick an ingredient';
+  el('hint').textContent = sim.getChefHint();
+  el('stats').textContent = `${sim.served} served · ${sim.perfectCount} perfect · ${sim.missed} missed · ${sim.wasted} wasted`;
+  el('room-status').textContent = sim.practice
+    ? 'PRACTICE · ZEN MODE'
+    : sim.combo >= 3
+    ? 'IN THE ZONE · HOT STREAK'
+    : sim.remaining < 35
+    ? 'FINAL CALL · RUSH HOUR'
+    : 'THE HEARTH IS LIT';
+
+  const toast = el('toast');
+  toast.textContent = sim.notice;
+  toast.className = sim.noticeTime > 0 ? 'show' : '';
+
+  syncOrderTickets();
+
+  for (const station of STATIONS) {
+    const btn = el(`station-${station.id}`);
+    btn.classList.toggle('active', sim.lastAction === station.id);
+    btn.classList.remove('ready', 'perfect', 'burn');
+    let sub = station.group === 'pantry' ? 'Pick' : 'Use';
+
+    if (station.id === 'prep') {
+      sub = sim.prep ? `Slice ${sim.prep.chops}/${CHOPS_REQUIRED}` : 'Chop x3';
+    } else if (station.id.startsWith('pan')) {
+      const pan = sim.pans[station.id === 'pan0' ? 0 : 1];
+      if (pan) {
+        const need = INGREDIENTS[pan.item].searTime;
+        if (pan.burnt) {
+          sub = 'Scorched · Clean';
+          btn.classList.add('burn');
+        } else if (pan.time >= need && pan.time <= need + PAN_PERFECT_WINDOW_SEC) {
+          sub = 'PERFECT · Lift!';
+          btn.classList.add('perfect');
+        } else if (pan.time >= need) {
+          sub = 'Lift now!';
+          btn.classList.add('ready');
+        } else {
+          sub = `Searing ${Math.ceil(need - pan.time)}s`;
+        }
+      } else {
+        sub = 'Empty skillet';
+      }
+    } else if (station.id === 'pot') {
+      if (sim.pot) {
+        const need = INGREDIENTS[sim.pot.item].simmerTime;
+        if (sim.pot.burnt) {
+          sub = 'Dry · Rinse';
+          btn.classList.add('burn');
+        } else if (sim.pot.time >= need) {
+          sub = 'Simmered · Lift';
+          btn.classList.add('ready');
+        } else {
+          sub = `Simmer ${Math.ceil(need - sim.pot.time)}s`;
+        }
+      } else {
+        sub = 'Noodles / Broth';
+      }
+    } else if (station.id.startsWith('plate')) {
+      const idx = station.id === 'plate0' ? 0 : 1;
+      const plate = sim.plates[idx];
+      const match = findMatchingRecipe(plate.components);
+      sub = match ? match.name : plate.components.length ? `${plate.components.length} plated` : 'Empty plate';
+      if (plate.herbs) sub += ' +Herb';
+      if (match) btn.classList.add('ready');
+    } else if (station.id === 'herbs') {
+      sub = '+6c Bonus';
+    } else if (station.id === 'serve') {
+      const match = findMatchingRecipe(sim.plates[sim.selectedPlate].components);
+      sub = match && sim.orders.some((o) => o.recipe.id === match.id) ? 'READY · Serve!' : 'Ring Bell';
+      if (sub.startsWith('READY')) btn.classList.add('ready');
+    }
+
+    btn.querySelector('small').textContent = sub;
+  }
+}
+
+el('sound').addEventListener('click', () => {
+  audio.unlock();
+  audio.setMuted(!audio.isMuted());
+  el('sound').textContent = audio.isMuted() ? 'Sound Off' : 'Sound On';
+});
+el('pause').addEventListener('click', () => triggerAction('pause'));
+el('recipes').addEventListener('click', () => triggerAction('recipes'));
+el('help').addEventListener('click', () => triggerAction('help'));
+el('discard').addEventListener('click', () => triggerAction('discard'));
+
+const onVisibility = () => {
+  if (document.hidden && sim.isPlaying()) openPauseModal();
+};
+document.addEventListener('visibilitychange', onVisibility);
+
+window.addEventListener('beforeunload', () => {
+  cancelAnimationFrame(rafId);
+  unbindInput();
+  input.destroy();
+  document.removeEventListener('visibilitychange', onVisibility);
+});
+
+function frame(nowMs) {
+  const dt = Math.min(MAX_DELTA_SEC, Math.max(0, (nowMs - lastFrameMs) / 1000));
+  lastFrameMs = nowMs;
+
+  const prevMode = sim.mode;
+  sim.update(dt);
+  flushCue();
+  renderer.render(sim, nowMs / 1000);
+
+  uiRefreshAccum += dt;
+  if (uiRefreshAccum >= 0.08) {
+    syncHUD();
+    uiRefreshAccum = 0;
+  }
+  if (prevMode === GameMode.PLAYING && sim.mode === GameMode.RESULTS) {
+    openResultsModal();
+  }
+
+  rafId = requestAnimationFrame(frame);
+}
+
+buildStationButtons();
+syncHUD();
+openTitleModal();
+rafId = requestAnimationFrame(frame);
+
+// Expose read-only inspection helper for automated test verification
+window.__emberDebug = { sim, startService, triggerAction };

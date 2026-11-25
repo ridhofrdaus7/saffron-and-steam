@@ -1,4 +1,4 @@
-// Saffron & Steam — Make the best cooking game entry (Node 22, standard library only).
+// Ember & Ladle — Make the best cooking game entry (Node 22, standard library only).
 // Copies game/ and screenshots/ to /output (or MAKEFUN_OUTPUT_DIR) and generates dossier.json.
 
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
